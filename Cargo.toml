@@ -1,11 +1,11 @@
 [workspace]
+members = ["t1_window", "t2_surface"]
 resolver = "2"
-members = ["t1_window"]
 
 [workspace.dependencies]
 cfg-if = "1.0.0"
 #Only features sync,macros,io-util,rt,time are supported on wasm
-tokio = { version = "1.4.0", features = ["rt", "macros"] }
+tokio = { version = "1.27.0", features = ["rt", "macros"] }
 tracing = "0.1.37"
 tracing-subscriber = "0.3.16"
 wgpu = "0.15.1"
