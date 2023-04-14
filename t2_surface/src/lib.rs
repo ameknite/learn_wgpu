@@ -1,5 +1,4 @@
 use std::iter;
-use tracing::{error, info, warn};
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -50,15 +49,19 @@ impl State {
                 &wgpu::DeviceDescriptor {
                     label: None,
                     // features: wgpu::Features::empty(),
-                    features: adapter.features(),
+                    features: if cfg!(target_arch = "wasm32") {
+                        wgpu::Features::empty()
+                    } else {
+                        adapter.features()
+                    },
+                    // limits: wgpu::Limits::default(),
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web we'll have to disable some.
-                    // limits: if cfg!(target_arch = "wasm32") {
-                    //     wgpu::Limits::downlevel_webgl2_defaults()
-                    // } else {
-                    //     wgpu::Limits::default()
-                    // },
-                    limits: wgpu::Limits::default(),
+                    limits: if cfg!(target_arch = "wasm32") {
+                        wgpu::Limits::downlevel_webgl2_defaults()
+                    } else {
+                        wgpu::Limits::default()
+                    },
                 },
                 // Some(&std::path::Path::new("trace")), // Trace path
                 None,
@@ -81,13 +84,14 @@ impl State {
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: surface_caps.present_modes[1],
-            alpha_mode: surface_caps.alpha_modes[1],
+            present_mode: surface_caps.present_modes[0],
+            alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
         };
+        tracing::info!("{:#?}", surface_caps);
         surface.configure(&device, &config);
 
-        let clear_color = wgpu::Color::WHITE;
+        let clear_color = wgpu::Color::BLACK;
 
         Self {
             window,
@@ -112,10 +116,6 @@ impl State {
             self.surface.configure(&self.device, &self.config);
         }
     }
-
-    // fn input(&mut self, event: &WindowEvent) -> bool {
-    //     false
-    // }
 
     fn update(&mut self) {
         todo!()
@@ -198,28 +198,36 @@ pub async fn run() {
         Event::WindowEvent {
             ref event,
             window_id,
-        } if window_id == state.window().id() => match event {
-            WindowEvent::CloseRequested
-            | WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
-                        state: ElementState::Pressed,
-                        virtual_keycode: Some(VirtualKeyCode::Escape),
-                        ..
-                    },
-                ..
-            } => *control_flow = ControlFlow::Exit,
-            WindowEvent::Resized(physical_size) => {
-                state.resize(*physical_size);
+        } if window_id == state.window().id() => {
+            match event {
+                WindowEvent::CloseRequested
+                | WindowEvent::KeyboardInput {
+                    input:
+                        KeyboardInput {
+                            state: ElementState::Pressed,
+                            virtual_keycode: Some(VirtualKeyCode::Escape),
+                            ..
+                        },
+                    ..
+                } => *control_flow = ControlFlow::Exit,
+                WindowEvent::Resized(physical_size) => {
+                    state.resize(*physical_size);
+                }
+                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                    // new_inner_size is &mut so w have to dereference it twice
+                    state.resize(**new_inner_size);
+                }
+                WindowEvent::CursorMoved { position, .. } => {
+                    state.clear_color = wgpu::Color {
+                        r: position.x / state.size.width as f64,
+                        g: position.y / state.size.height as f64,
+                        b: 1.0,
+                        a: 1.0,
+                    };
+                }
+                _ => {}
             }
-            WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                state.resize(**new_inner_size);
-            }
-            WindowEvent::CursorMoved { .. } => {
-                state.clear_color = wgpu::Color::RED;
-            }
-            _ => {}
-        },
+        }
         Event::RedrawRequested(window_id) if window_id == state.window().id() => {
             // state.update();
             match state.render() {
@@ -231,7 +239,7 @@ pub async fn run() {
                 // The system is out of memory, we should probably quit
                 Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
 
-                Err(wgpu::SurfaceError::Timeout) => warn!("Surface timeout"),
+                Err(wgpu::SurfaceError::Timeout) => tracing::warn!("Surface timeout"),
             }
         }
         Event::RedrawEventsCleared => {
