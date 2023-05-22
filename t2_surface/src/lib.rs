@@ -44,11 +44,13 @@ impl State {
             .await
             .unwrap();
 
+        tracing::info!("{:#?}", adapter.get_info());
+
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
-                    // features: wgpu::Features::empty(),
+                    // features: wgpu::Features::empty (),
                     features: if cfg!(target_arch = "wasm32") {
                         wgpu::Features::empty()
                     } else {
